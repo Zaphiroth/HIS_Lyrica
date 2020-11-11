@@ -15,7 +15,9 @@ ReadinFunc <- function(filename) {
   sheet.list <- lapply(sheet.names, read_excel, path = filename) %>% 
     lapply(mutate, 
            VISIT_ID = as.numeric(VISIT_ID), 
-           VISIT_DATE = as.character(VISIT_DATE), 
+           VISIT_DATE = ifelse(is.numeric(VISIT_DATE), 
+                               as.Date(VISIT_DATE, origin = '1899-12-30'), 
+                               VISIT_DATE), 
            AGE = as.numeric(AGE), 
            AMOUNT = as.numeric(AMOUNT), 
            COSTS = as.numeric(COSTS), 

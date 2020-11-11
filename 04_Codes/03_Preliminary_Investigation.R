@@ -6,27 +6,39 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 
+##---- Product infomation ----
+prod.info <- data.standard %>% 
+  distinct(DRUG_NAME, DRUG_FORM, DRUG_SPEC, FIRM_ID) %>% 
+  arrange(DRUG_NAME, FIRM_ID)
+
+write.xlsx(prod.info, '03_Outputs/03_Product_Information.xlsx')
+
+
 ##---- Data integrity ----
 total.num <- data.standard %>% 
+  group_by(VISIT_TYPE) %>% 
   summarise_all(function(x) sum(!is.na(x))) %>% 
-  mutate(index = '总条目数')
+  ungroup() %>% 
+  mutate(Index = '总条目数')
 
 missing.num <- data.standard %>% 
+  group_by(VISIT_TYPE) %>% 
   summarise_all(function(x) sum(is.na(x))) %>% 
-  mutate(index = '空缺条目数')
+  ungroup() %>% 
+  mutate(Index = '空缺条目数')
 
 data.integrity <- bind_rows(total.num, missing.num) %>% 
-  pivot_longer(col = -index, 
+  pivot_longer(col = -c(VISIT_TYPE, Index), 
                names_to = 'col', 
                values_to = 'num') %>% 
-  pivot_wider(id_cols = col, 
-              names_from = index, 
+  pivot_wider(id_cols = c(VISIT_TYPE, col), 
+              names_from = Index, 
               values_from = num) %>% 
   mutate(`空缺率` = `空缺条目数` / (`总条目数` + `空缺条目数`)) %>% 
-  pivot_longer(cols = -col, 
-               names_to = 'index', 
+  pivot_longer(cols = -c(VISIT_TYPE, col), 
+               names_to = 'Index', 
                values_to = 'num') %>% 
-  pivot_wider(id_cols = index, 
+  pivot_wider(id_cols = c(VISIT_TYPE, Index), 
               names_from = col, 
               values_from = num)
 
@@ -55,33 +67,47 @@ molecule.composition <- data.standard %>%
 # patients ratio
 patients.ratio <- data.standard %>% 
   distinct(HCODE, VISIT_TYPE, PKEY, VISIT_ID, VISIT_DATE) %>% 
-  count(HCODE, VISIT_TYPE) %>% 
+  count(HCODE, VISIT_TYPE, name = 'patients') %>% 
   pivot_wider(id_cols = HCODE, 
               names_from = VISIT_TYPE, 
-              values_from = n) %>% 
+              values_from = patients) %>% 
   mutate(Ratio = `门诊` / `住院`)
 
 
 ##---- Time continuity & stability ----
 # patients
 trend.patients <- data.standard %>% 
-  distinct(HCODE, PKEY, VISIT_ID, VISIT_DATE) %>% 
+  distinct(VISIT_TYPE, HCODE, PKEY, VISIT_ID, VISIT_DATE) %>% 
   mutate(VISIT_DATE = stri_sub(VISIT_DATE, 1, 7)) %>% 
-  count(HCODE, VISIT_DATE) %>% 
-  arrange(HCODE, VISIT_DATE) %>% 
-  pivot_wider(id_cols = HCODE, 
+  count(VISIT_TYPE, HCODE, VISIT_DATE, name = 'patients') %>% 
+  arrange(VISIT_TYPE, HCODE, VISIT_DATE) %>% 
+  add_count(VISIT_TYPE, HCODE, name = 'Rows') %>% 
+  group_by(VISIT_TYPE, HCODE) %>% 
+  mutate(n_floor = mean(patients) - sd(patients), 
+         n_ceiling = mean(patients) + sd(patients), 
+         n_IDT = if_else(patients > n_floor & patients < n_ceiling, 1, 0), 
+         IDT = sum(n_IDT)) %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols = c(VISIT_TYPE, HCODE, Rows, IDT), 
               names_from = VISIT_DATE, 
-              values_from = n, 
+              values_from = patients, 
               values_fill = 0)
 
 # costs
 trend.costs <- data.standard %>% 
   mutate(VISIT_DATE = stri_sub(VISIT_DATE, 1, 7)) %>% 
-  group_by(HCODE, VISIT_DATE) %>% 
+  group_by(VISIT_TYPE, HCODE, VISIT_DATE) %>% 
   summarise(COSTS = sum(COSTS, na.rm = TRUE)) %>% 
   ungroup() %>% 
-  arrange(HCODE, VISIT_DATE) %>% 
-  pivot_wider(id_cols = HCODE, 
+  arrange(VISIT_TYPE, HCODE, VISIT_DATE) %>% 
+  add_count(VISIT_TYPE, HCODE, name = 'Rows') %>% 
+  group_by(VISIT_TYPE, HCODE) %>% 
+  mutate(n_floor = mean(COSTS) - sd(COSTS), 
+         n_ceiling = mean(COSTS) + sd(COSTS), 
+         n_IDT = if_else(COSTS > n_floor & COSTS < n_ceiling, 1, 0), 
+         IDT = sum(n_IDT)) %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols = c(VISIT_TYPE, HCODE, Rows, IDT), 
               names_from = VISIT_DATE, 
               values_from = COSTS, 
               values_fill = 0)
@@ -89,13 +115,20 @@ trend.costs <- data.standard %>%
 # rows
 trend.rows <- data.standard %>% 
   mutate(VISIT_DATE = stri_sub(VISIT_DATE, 1, 7)) %>% 
-  group_by(HCODE, VISIT_DATE) %>% 
-  summarise(row = n()) %>% 
+  group_by(VISIT_TYPE, HCODE, VISIT_DATE) %>% 
+  summarise(rows = n()) %>% 
   ungroup() %>% 
-  arrange(HCODE, VISIT_DATE) %>% 
-  pivot_wider(id_cols = HCODE, 
+  arrange(VISIT_TYPE, HCODE, VISIT_DATE) %>% 
+  add_count(VISIT_TYPE, HCODE, name = 'Rows') %>% 
+  group_by(VISIT_TYPE, HCODE) %>% 
+  mutate(n_floor = mean(rows) - sd(rows), 
+         n_ceiling = mean(rows) + sd(rows), 
+         n_IDT = if_else(rows > n_floor & rows < n_ceiling, 1, 0), 
+         IDT = sum(n_IDT)) %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols = c(VISIT_TYPE, HCODE, Rows, IDT), 
               names_from = VISIT_DATE, 
-              values_from = row, 
+              values_from = rows, 
               values_fill = 0)
 
 
