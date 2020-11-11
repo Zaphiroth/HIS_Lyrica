@@ -8,11 +8,11 @@
 
 ##---- Distinct standardizing columns ----
 {
-  data.standardizing <- data.his %>% 
+  data.standard <- data.his %>% 
     mutate(key_word_flag = if_else(grepl('疱疹|癌|肿瘤|神经|糖尿病|腰|椎
                                        |痛|脊|关节|术|骨折', DIAG_DESC), 
                                    1, 0), 
-           standard_prod = case_when(
+           Molecule = case_when(
              grepl('阿米替林', DRUG_NAME) ~ '阿米替林', 
              grepl('度洛西汀', DRUG_NAME) ~ '度洛西汀', 
              grepl('文拉法辛', DRUG_NAME) ~ '文拉法辛', 
@@ -42,23 +42,23 @@
              grepl('肉毒毒素', DRUG_NAME) ~ '肉毒毒素', 
              grepl('丁螺环酮', DRUG_NAME) ~ '丁螺环酮', 
              TRUE ~ NA_character_
-           )) %>% 
-    distinct(PKEY, VISIT_ID, DIAG_DESC, key_word_flag, DRUG_NAME, standard_prod) %>% 
-    count(DIAG_DESC, key_word_flag, DRUG_NAME, standard_prod, name = 'patients')
+           ))
 }
 ## TODO LZ: 检查缺失情况
 
-# write.csv(data.standardizing, '03_Outputs/02_HIS_Standardizing.csv', row.names = FALSE)
-write_feather(data.standardizing, '03_Outputs/02_HIS_Standardizing.feather')
+write_feather(data.standard, '03_Outputs/02_HIS_Standard.feather')
 
 
 ##---- Pivot table ----
-data.his <- read_feather('03_Outputs/01_门诊&住院信息.feather')
-data.standardizing <- read_feather('03_Outputs/02_HIS_Standardizing.feather')
+# data.his <- read_feather('03_Outputs/01_HIS_Raw.feather')
+# data.standard <- read_feather('03_Outputs/02_HIS_Standard.feather')
+
+pivot.data <- data.standard %>% 
+  distinct(PKEY, VISIT_ID, DIAG_DESC, key_word_flag, DRUG_NAME, standard_prod) %>% 
+  count(DIAG_DESC, key_word_flag, DRUG_NAME, standard_prod, name = 'patients')
 
 ## diagnosis & product
-diag.prod.pts <- data.standardizing %>% 
-  # filter(!is.na(standard_prod)) %>% 
+diag.prod.pts <- pivot.data %>% 
   filter(key_word_flag == 1) %>% 
   group_by(DIAG_DESC, standard_prod) %>% 
   summarise(patients = sum(patients, na.rm = TRUE)) %>% 
@@ -68,8 +68,7 @@ diag.prod.pts <- data.standardizing %>%
 write.csv(diag.prod.pts, '03_Outputs/02_Diagnosis_Product_Patients.csv', row.names = FALSE)
 
 ## product
-prod.pts <- data.standardizing %>% 
-  # filter(!is.na(standard_prod)) %>% 
+prod.pts <- pivot.data %>% 
   group_by(standard_prod) %>% 
   summarise(patients = sum(patients, na.rm = TRUE)) %>% 
   ungroup()
@@ -77,8 +76,7 @@ prod.pts <- data.standardizing %>%
 write.xlsx(prod.pts, '03_Outputs/02_Product_Patients.xlsx')
 
 ## diagnosis ratio of product
-diag.prod.pts.ratio <- data.standardizing %>% 
-  # filter(!is.na(standard_prod)) %>% 
+diag.prod.pts.ratio <- pivot.data %>% 
   group_by(standard_prod, key_word_flag) %>% 
   summarise(patients = sum(patients, na.rm = TRUE)) %>% 
   ungroup() %>% 
