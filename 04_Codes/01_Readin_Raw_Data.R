@@ -15,14 +15,24 @@ ReadinFunc <- function(filename) {
   sheet.list <- lapply(sheet.names, read_excel, path = filename) %>% 
     lapply(mutate, 
            VISIT_ID = as.numeric(VISIT_ID), 
-           VISIT_DATE = ifelse(is.numeric(VISIT_DATE), 
-                               as.Date(VISIT_DATE, origin = '1899-12-30'), 
-                               VISIT_DATE), 
+           VISIT_DATE = sapply(VISIT_DATE, function(x) {
+             ifelse(nchar(x) == 5, 
+                    as.character(as.Date(as.numeric(x), origin = '1899-12-30')), 
+                    as.character(x))
+           }, USE.NAMES = FALSE), 
            AGE = as.numeric(AGE), 
            AMOUNT = as.numeric(AMOUNT), 
            COSTS = as.numeric(COSTS), 
-           ADMISSION_DATE_TIME = as.character(ADMISSION_DATE_TIME), 
-           DISCHARGE_DATE_TIME = as.character(DISCHARGE_DATE_TIME))
+           ADMISSION_DATE_TIME = sapply(ADMISSION_DATE_TIME, function(x) {
+             ifelse(nchar(x) == 5, 
+                    as.character(as.Date(as.numeric(x), origin = '1899-12-30')), 
+                    as.character(x))
+           }, USE.NAMES = FALSE), 
+           DISCHARGE_DATE_TIME = sapply(DISCHARGE_DATE_TIME, function(x) {
+             ifelse(nchar(x) == 5, 
+                    as.character(as.Date(as.numeric(x), origin = '1899-12-30')), 
+                    as.character(x))
+           }, USE.NAMES = FALSE))
   
   names(sheet.list) <- sheet.names
   
@@ -59,3 +69,6 @@ data.his <- bind_rows(data.outpatient, data.inhospital) %>%
   mutate(VISIT_DATE = stri_sub(VISIT_DATE, 1, 10))
 
 write_feather(data.his, '03_Outputs/01_HIS_Raw.feather')
+
+
+
