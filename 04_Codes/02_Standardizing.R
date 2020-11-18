@@ -8,14 +8,18 @@
 
 ##---- Standardizing ----
 ## sample selection
-hospital.sample <- read.xlsx('02_Inputs/样本医院名单-30家.xlsx')
+hospital.sample <- read.xlsx('02_Inputs/选择样本医院名单-35家.xlsx', cols = 1:4) %>% 
+  filter(`是否为样本` == 1)
 
+## standardizing
+native.std.mapping <- read.xlsx('02_Inputs/籍贯匹配表_已清洗.xlsx')
 dept.std.mapping <- read.xlsx('02_Inputs/HIS科室清洗_veeva标准.xlsx', sheet = 3, cols = c(1, 6))
 nep.mapping <- read.xlsx('02_Inputs/清洗规则_应用版3.xlsx', cols = c(2, 3))
 
 {
   data.standard <- data.his %>% 
     filter(HCODE %in% hospital.sample$HCODE) %>% 
+    left_join(native.std.mapping, by = 'AREA_NAME') %>% 
     left_join(dept.std.mapping, by = c('DEPT_NAME' = 'dept_name')) %>% 
     mutate(
       Mol_std = case_when(
@@ -69,26 +73,6 @@ nep.mapping <- read.xlsx('02_Inputs/清洗规则_应用版3.xlsx', cols = c(2, 3
         grepl('老干', DEPT_NAME) ~ '老干科', 
         TRUE ~ NA_character_
       ), 
-      Dept_std1 = case_when(
-        grepl('急诊', `科室清洗结果`) ~ '急诊科', 
-        grepl('儿科', `科室清洗结果`) ~ '儿科', 
-        grepl('疼痛|麻醉', `科室清洗结果`) ~ '疼痛科', 
-        grepl('皮', `科室清洗结果`) ~ '皮肤科', 
-        grepl('运动医学|骨质疏松', `科室清洗结果`) ~ '骨科', 
-        grepl('外科', `科室清洗结果`) ~ '外科', 
-        grepl('内分泌|消化内|血液内分泌|代谢病', `科室清洗结果`) ~ '内分泌科', 
-        grepl('精神|心理', `科室清洗结果`) ~ '精神心理科', 
-        grepl('神经内', `科室清洗结果`) ~ '神经内科', 
-        grepl('肿瘤外', `科室清洗结果`) ~ '肿瘤外科', 
-        grepl('肿瘤内', `科室清洗结果`) ~ '肿瘤内科', 
-        grepl('心脏中心|心内', `科室清洗结果`) ~ '心内科', 
-        grepl('肾内科', `科室清洗结果`) ~ '肾内科', 
-        grepl('普通内', `科室清洗结果`) ~ '普通内科', 
-        grepl('泌尿肿瘤外', `科室清洗结果`) ~ '泌尿外科', 
-        grepl('风湿免疫|血液风湿', `科室清洗结果`) ~ '风湿免疫科', 
-        grepl('老干', `科室清洗结果`) ~ '老干科', 
-        TRUE ~ NA_character_
-      ), 
       flag_dept = if_else(is.na(Dept_std), 0, 1), 
       Diag_std = case_when(
         grepl('疱疹', DIAG_DESC) ~ '疱疹', 
@@ -130,14 +114,20 @@ nep.mapping <- read.xlsx('02_Inputs/清洗规则_应用版3.xlsx', cols = c(2, 3
         grepl('疼|痛', DIAG_DESC) ~ '其他疼痛', 
         TRUE ~ '其他疾病'
       ), 
-      flag_form = if_else(Mol_std == '利多卡因' & !grepl('贴', DRUG_FORM), 0, 1), 
+      flag_mol = if_else(Mol_std %in% c('阿米替林', '度洛西汀', '文拉法辛', 
+                                        '普瑞巴林', '加巴喷丁', '卡马西平', 
+                                        '奥卡西平', '利多卡因'), 1, 0), 
       Nep = case_when(
         Diag_std %in% c('疱疹', '糖尿病周围神经病变', '腰背神经痛', 
                         '三叉神经痛', '术后神经痛', '关节神经痛', '其他神经痛', 
                         '中枢神经病理性疼痛', '其他腰背痛', '幻肢痛') ~ '明确或高度可能NeP', 
-        Diag_std %in% c('肿瘤/癌症', '糖尿病', '其他头痛', '其他神经疾病', 
-                        '其他中枢神经疾病', '其他疾病术后', '其他腰背痛') & 
-          flag_form == 1 ~ '很大可能NeP', 
+        Diag_std %in% c('肿瘤/癌症', '糖尿病', '慢性偏头痛', '慢性紧张型头痛', 
+                        '慢性丛集性头痛', '其他慢性头痛', '偏头痛', '紧张型头痛', 
+                        '丛集性头痛', '其他原发性头痛', '创伤后头痛', '颈源性头痛', 
+                        '高血压头痛', '药物过量性头痛', '其他继发性头痛', 
+                        '神经性头痛', '其他头痛', '其他神经疾病', '其他中枢神经疾病', 
+                        '其他疾病术后', '其他腰背痛') & 
+          flag_mol == 1 ~ '很大可能NeP', 
         Diag_std %in% c('腰脊疾病术后', '关节疾病术后', '创伤术后') ~ '很大可能NeP', 
         Diag_std %in% c('肿瘤/癌症', '糖尿病', '慢性偏头痛', '慢性紧张型头痛', 
                         '慢性丛集性头痛', '其他慢性头痛', '偏头痛', '紧张型头痛', 
@@ -161,24 +151,27 @@ nep.mapping <- read.xlsx('02_Inputs/清洗规则_应用版3.xlsx', cols = c(2, 3
       #   grepl('糖尿病|术|肿瘤|癌|卒中|多发性硬化|腰|颈|脊|头痛|神经', DIAG_DESC) ~ '有可能NeP', 
       #   TRUE ~ '不太可能NeP'
       # )
-    )
+    ) %>% 
+    filter(!(Mol_std == '利多卡因' & !grepl('贴|帖', DRUG_FORM)))
 }
-
 ## TODO LZ: 检查缺失情况
+
 write_feather(data.standard, '03_Outputs/02_HIS_Standard.feather')
 
 nep.pivot <- data.standard %>% 
-  distinct(PKEY, VISIT_ID, Nep) %>% 
-  count(Nep) %>% 
+  distinct(VISIT_TYPE, PKEY, VISIT_ID, Nep) %>% 
+  count(VISIT_TYPE, Nep) %>% 
+  group_by(VISIT_TYPE) %>% 
   mutate(Nep_prop = round(n / sum(n, na.rm = TRUE), 4)) %>% 
+  ungroup() %>% 
   select(-n)
 
 write.xlsx(nep.pivot, '03_Outputs/02_Nep_Patients_Proportation.xlsx')
 
 ## diagnosis
-unmatched.diag <- data.standard %>% 
-  filter(is.na(Diag_std)) %>% 
-  distinct(DIAG_DESC)
+# unmatched.diag <- data.standard %>% 
+#   filter(is.na(Diag_std)) %>% 
+#   distinct(DIAG_DESC)
 
 
 ##---- Pivot table ----
