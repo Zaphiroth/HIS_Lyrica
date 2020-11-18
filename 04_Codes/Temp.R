@@ -53,3 +53,15 @@ dept.pts <- data.his %>%
 
 write.xlsx(dept.pts, '03_Outputs/02_Department_Patients.xlsx')
 
+
+##---- Pack ----
+## Units
+pack.calc <- data.standard %>% 
+  distinct(DRUG_SPEC, AMOUNT, UNITS, COSTS) %>% 
+  group_by(UNITS) %>% 
+  filter(row_number() <= 100) %>% 
+  ungroup()
+
+wb.pack <- createWorkbook()
+map(unique(pack.calc$UNITS))
+

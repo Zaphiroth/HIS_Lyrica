@@ -12,15 +12,26 @@ hospital.sample <- read.xlsx('02_Inputs/选择样本医院名单-35家.xlsx', co
   filter(`是否为样本` == 1)
 
 ## standardizing
-native.std.mapping <- read.xlsx('02_Inputs/籍贯匹配表_已清洗.xlsx')
-dept.std.mapping <- read.xlsx('02_Inputs/HIS科室清洗_veeva标准.xlsx', sheet = 3, cols = c(1, 6))
-nep.mapping <- read.xlsx('02_Inputs/清洗规则_应用版3.xlsx', cols = c(2, 3))
+native.mapping <- read.xlsx('02_Inputs/籍贯清洗结果.xlsx')
+charge.mapping <- read.xlsx('02_Inputs/医保清洗结果.xlsx', cols = c(1, 3))
+dept.mapping <- read.xlsx('02_Inputs/科室清洗结果.xlsx', cols = c(1, 5))
+pack.mapping <- read.xlsx('02_Inputs/35家医院packid匹配.xlsx', cols = c(1:4, 6:7, 9:13))
 
 {
   data.standard <- data.his %>% 
     filter(HCODE %in% hospital.sample$HCODE) %>% 
-    left_join(native.std.mapping, by = 'AREA_NAME') %>% 
-    left_join(dept.std.mapping, by = c('DEPT_NAME' = 'dept_name')) %>% 
+    mutate(Quarter = stri_sub(VISIT_DATE, 6, 7), 
+           Quarter = case_when(Quarter %in% c('01', '02', '03') ~ 'Q1', 
+                               Quarter %in% c('04', '05', '06') ~ 'Q2', 
+                               Quarter %in% c('07', '08', '09') ~ 'Q3', 
+                               Quarter %in% c('10', '11', '12') ~ 'Q4', 
+                               TRUE ~ NA_character_), 
+           Quarter = stri_paste(stri_sub(VISIT_DATE, 1, 4), Quarter), 
+           Month = gsub('[-]', '', stri_sub(VISIT_DATE, 1, 7))) %>% 
+    left_join(native.mapping, by = 'AREA_NAME') %>% 
+    left_join(charge.mapping, by = 'CHARGE_TYPE') %>% 
+    left_join(dept.mapping, by = 'DEPT_NAME') %>% 
+    left_join(pack.mapping, by = c('DRUG_NAME', 'DRUG_FORM', 'DRUG_SPEC', 'FIRM_ID')) %>% 
     mutate(
       Mol_std = case_when(
         grepl('阿米替林', DRUG_NAME) ~ '阿米替林', 
@@ -53,27 +64,27 @@ nep.mapping <- read.xlsx('02_Inputs/清洗规则_应用版3.xlsx', cols = c(2, 3
         grepl('丁螺环酮', DRUG_NAME) ~ '丁螺环酮', 
         TRUE ~ NA_character_
       ), 
-      Dept_std = case_when(
-        grepl('急诊', DEPT_NAME) ~ '急诊科', 
-        grepl('儿科', DEPT_NAME) ~ '儿科', 
-        grepl('疼痛|麻醉', DEPT_NAME) ~ '疼痛科', 
-        grepl('皮', DEPT_NAME) ~ '皮肤科', 
-        grepl('运动医学|骨质疏松', DEPT_NAME) ~ '骨科', 
-        grepl('外科', DEPT_NAME) ~ '外科', 
-        grepl('内分泌|消化内|血液内分泌|代谢病', DEPT_NAME) ~ '内分泌科', 
-        grepl('精神|心理', DEPT_NAME) ~ '精神心理科', 
-        grepl('神经内', DEPT_NAME) ~ '神经内科', 
-        grepl('肿瘤外', DEPT_NAME) ~ '肿瘤外科', 
-        grepl('肿瘤内', DEPT_NAME) ~ '肿瘤内科', 
-        grepl('心脏中心|心内', DEPT_NAME) ~ '心内科', 
-        grepl('肾内科', DEPT_NAME) ~ '肾内科', 
-        grepl('普通内', DEPT_NAME) ~ '普通内科', 
-        grepl('泌尿肿瘤外', DEPT_NAME) ~ '泌尿外科', 
-        grepl('风湿免疫|血液风湿', DEPT_NAME) ~ '风湿免疫科', 
-        grepl('老干', DEPT_NAME) ~ '老干科', 
-        TRUE ~ NA_character_
-      ), 
-      flag_dept = if_else(is.na(Dept_std), 0, 1), 
+      # Dept_std = case_when(
+      #   grepl('急诊', DEPT_NAME) ~ '急诊科', 
+      #   grepl('儿科', DEPT_NAME) ~ '儿科', 
+      #   grepl('疼痛|麻醉', DEPT_NAME) ~ '疼痛科', 
+      #   grepl('皮', DEPT_NAME) ~ '皮肤科', 
+      #   grepl('运动医学|骨质疏松', DEPT_NAME) ~ '骨科', 
+      #   grepl('外科', DEPT_NAME) ~ '外科', 
+      #   grepl('内分泌|消化内|血液内分泌|代谢病', DEPT_NAME) ~ '内分泌科', 
+      #   grepl('精神|心理', DEPT_NAME) ~ '精神心理科', 
+      #   grepl('神经内', DEPT_NAME) ~ '神经内科', 
+      #   grepl('肿瘤外', DEPT_NAME) ~ '肿瘤外科', 
+      #   grepl('肿瘤内', DEPT_NAME) ~ '肿瘤内科', 
+      #   grepl('心脏中心|心内', DEPT_NAME) ~ '心内科', 
+      #   grepl('肾内科', DEPT_NAME) ~ '肾内科', 
+      #   grepl('普通内', DEPT_NAME) ~ '普通内科', 
+      #   grepl('泌尿肿瘤外', DEPT_NAME) ~ '泌尿外科', 
+      #   grepl('风湿免疫|血液风湿', DEPT_NAME) ~ '风湿免疫科', 
+      #   grepl('老干', DEPT_NAME) ~ '老干科', 
+      #   TRUE ~ NA_character_
+      # ), 
+      # flag_dept = if_else(is.na(Dept_std), 0, 1), 
       Diag_std = case_when(
         grepl('疱疹', DIAG_DESC) ~ '疱疹', 
         grepl('肿瘤|癌', DIAG_DESC) ~ '肿瘤/癌症', 
@@ -110,13 +121,14 @@ nep.mapping <- read.xlsx('02_Inputs/清洗规则_应用版3.xlsx', cols = c(2, 3
         grepl('腰|颈|脊', DIAG_DESC) ~ '其他腰背痛', 
         grepl('骨折', DIAG_DESC) ~ '骨折', 
         grepl('关节炎', DIAG_DESC) ~ '关节炎', 
+        grepl('关节', DIAG_DESC) ~ '其他关节疾病', 
         grepl('幻肢', DIAG_DESC) & grepl('疼|痛', DIAG_DESC) ~ '幻肢痛', 
         grepl('疼|痛', DIAG_DESC) ~ '其他疼痛', 
         TRUE ~ '其他疾病'
       ), 
       flag_mol = if_else(Mol_std %in% c('阿米替林', '度洛西汀', '文拉法辛', 
                                         '普瑞巴林', '加巴喷丁', '卡马西平', 
-                                        '奥卡西平', '利多卡因'), 1, 0), 
+                                        '奥卡西平', '利多卡因', '甲钴胺'), 1, 0), 
       Nep = case_when(
         Diag_std %in% c('疱疹', '糖尿病周围神经病变', '腰背神经痛', 
                         '三叉神经痛', '术后神经痛', '关节神经痛', '其他神经痛', 
